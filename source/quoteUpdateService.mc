@@ -5,23 +5,48 @@ using Toybox.Math;
 
 (:background)
 class quoteUpdateService extends System.ServiceDelegate {
+	// Number of quotes per response page
+	private var PAGE_SIZE = 15;
+	private var BACKEND_HOST = "https://backends.onrender.com";
+
+	// Will be set to the page number of the last page of quotes, once the page count has been received
+	// This will be equal to   pageCount - 1
+	private var lastPage = -1;
+
 	function initialize() {
 		System.ServiceDelegate.initialize();
 	}
 
+	// When the event fires we first get the number of pages available to download
 	public function onTemporalEvent() as Void {
-		if (!System.getDeviceSettings().phoneConnected) {
-			pickRandomQuote();
-			Background.exit(null);
+		var url = BACKEND_HOST + "/quotewidget/pagecount";
+		var options = {
+			:method => Communications.HTTP_REQUEST_METHOD_GET,
+			:responseType => Communications.HTTP_RESPONSE_CONTENT_TYPE_TEXT_PLAIN
+		};
+		var cb = method(:receivePageCountRequest);
+		Communications.makeWebRequest(url, {}, options, cb);
+	}
+
+	// Called when the HTTP request to get the page count completes.
+	function receivePageCountRequest(responseCode, data) {
+		if (responseCode == 200) {
+			lastPage = data.toNumber() - 1;
+			// Now that we have the number of pages we can download each of them,
+			// starting with the first page (page 0).
+			makeQuoteRequest(0);
 		}
 		else {
-			makeRequest();
+			//System.println("Response error in rpcr: " + responseCode);
+			// If a request fails we just ignore then pick a quote from the cached quotes.
+			pickRandomQuoteAndExit();
 		}
 	}
 
-	private function pickRandomQuote() {
-		var quotes = Storage.getValue("quotes");
-		if (quotes == null) {
+	// Picks a random quote from the downloaded ones, then terminates the background task.
+	private function pickRandomQuoteAndExit() {
+		var quoteCount = Storage.getValue("quoteCount").toNumber();
+		if (quoteCount == null) {
 			return;
 		}
 
@@ -33,16 +58,17 @@ class quoteUpdateService extends System.ServiceDelegate {
 		// Keep picking a random quote until we have a different one to yesterday
 		var randomIndex = -1;
 		while (true) {
-			randomIndex = random(0, quotes.size() - 1);
+			randomIndex = random(0, quoteCount - 1);
 
 			// If we only have one quote then we cannot get a different one each time so just exit.
 			// Infinite loops are bad lol.
-			if (!quotes[randomIndex]["id"].equals(lastQuoteID) or quotes.size() == 1) {
+			if (!Storage.getValue(randomIndex)["id"].equals(lastQuoteID) or quoteCount == 1) {
 				break;
 			}
 		}
 
-		Storage.setValue("quoteOfTheDay", quotes[randomIndex]);
+		Storage.setValue("quoteOfTheDay", Storage.getValue(randomIndex));
+		Background.exit(null);
 	}
 
 	// From https://stackoverflow.com/questions/11758809/what-is-the-optimal-algorithm-for-generating-an-unbiased-random-integer-within-a/11758872#11758872
@@ -63,45 +89,43 @@ class quoteUpdateService extends System.ServiceDelegate {
 		return min + output;
 	}
 
-	// Called when quote HTTP request suceeds
-	function onReceive(responseCode, data) {
+	// Called when quote download HTTP request complets
+	function onQuotesReceive(responseCode, data) {
 		if (responseCode == 200) {
-			Storage.setValue("quotes", data);
-		}
-		// else {
-		// 	System.println("Response ERROR: " + responseCode);
-		// }
+			var page = data["page"].toNumber();
+			var rows = data["rows"];
 
-		pickRandomQuote();
-		Background.exit(null);
+			// Save the quotes to storage, keys are the indices
+			for (var i = 0; i < rows.size(); i++) {
+				Storage.setValue(page * PAGE_SIZE + i, rows[i]);
+			}
+
+			// If this was the last page then we have received all quotes and we can now pick one.
+			// Otherwise we move on to the next page of quotes.
+			if (page == lastPage) {
+				Storage.setValue("quoteCount", PAGE_SIZE * lastPage + rows.size());
+				//System.println("All quotes received. Picking...");
+				pickRandomQuoteAndExit();
+			}
+			else {
+				makeQuoteRequest(page + 1);
+			}
+		}
+		else {
+			//System.println("Response ERROR: " + responseCode);
+			// If a request fails we just ignore then pick a quote from the cached quotes.
+			pickRandomQuoteAndExit();
+		}
 	}
 
-	private function makeRequest() as Void {
-		//var url = "https://data.mongodb-api.com/app/data-drlya/endpoint/data/v1/action/find";
-		var url = "https://thingproxy.freeboard.io/fetch/http://externalrequests.yaboichips.ga/GarminQuotes/getallquotes.php";
-
-		// var params = {
-		// 	"dataSource" => "Cluster0",
-		// 	"database" => "quotes",
-		// 	"collection" => "quotes",
-		// 	"filter" => {},
-		// 	"projection" => {"quote"=> 1}
-		// };
-
-		var params = {
-			"auth" => "jhgAKYSDGkjgasui"
-		};
-
+	// Downloads the specified page of quotes from the backend
+	private function makeQuoteRequest(page) as Void {
+		var url = BACKEND_HOST + "/quotewidget/quotes/" + page;
 		var options = {
-			:method => Communications.HTTP_REQUEST_METHOD_POST,
-			:headers => {
-				"Content-Type" => Communications.REQUEST_CONTENT_TYPE_URL_ENCODED
-				//"api-key" => "AzRGWlFDiRMdENnEnZ3o465xdl7igkztHoITXKHbI5gxnPwWpwxBtUgjqbNIvYS7"
-			},
+			:method => Communications.HTTP_REQUEST_METHOD_GET,
 			:responseType => Communications.HTTP_RESPONSE_CONTENT_TYPE_JSON
 		};
-
-		var cb = method(:onReceive);
-		Communications.makeWebRequest(url, params, options, cb);
+		var cb = method(:onQuotesReceive);
+		Communications.makeWebRequest(url, {}, options, cb);
 	}
 }

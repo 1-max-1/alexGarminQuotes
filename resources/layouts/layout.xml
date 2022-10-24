@@ -1,3 +1,3 @@
 <layout id="MainLayout">
-    <text-area id="QuoteLabel" x="center" y="center" width="75%" height="75%" justification="Graphics.TEXT_JUSTIFY_CENTER" color="Graphics.COLOR_BLUE" />
+    <text-area id="QuoteLabel" x="center" y="center" width="73%" height="73%" justification="Graphics.TEXT_JUSTIFY_CENTER" color="Graphics.COLOR_BLUE" font="Graphics.FONT_TINY" />
 </layout>
