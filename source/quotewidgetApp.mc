@@ -6,8 +6,6 @@ using Toybox.Time;
 
 (:background, :glance)
 class quotewidgetApp extends Application.AppBase {
-	protected var initialView;
-
 	function initialize() {
 		AppBase.initialize();
 		Background.registerForTemporalEvent(new Time.Duration(24 * 60 * 60));
@@ -23,20 +21,21 @@ class quotewidgetApp extends Application.AppBase {
 
 	// Return the initial view of your application here
 	function getInitialView() as Array<Views or InputDelegates>? {
-		self.initialView = new quotewidgetView();
-		var v = self.initialView;
-		return [ v ] as Array<Views or InputDelegates>;
+		var v = new quotewidgetView();
+		var inputDelegate = new quoteInputDelegate(method(:onQuoteSyncComplete));
+		return [ v, inputDelegate ] as Array<Views or InputDelegates>;
 	}
 
 	public function getServiceDelegate() {
-		return [ new quoteUpdateService() ];
+		return [ new quoteUpdateService(method(:onQuoteSyncComplete)) ];
 	}
 
 	public function onStorageChanged() {
-		if (self.initialView != null) {
-			self.initialView.loadQuoteOfTheDay();
-			WatchUi.requestUpdate();
-		}
+		WatchUi.requestUpdate();
+	}
+
+	public function onQuoteSyncComplete() {
+		WatchUi.requestUpdate();
 	}
 
 	function getGlanceView() {
