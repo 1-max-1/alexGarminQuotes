@@ -1,5 +1,6 @@
 using Toybox.Application.Storage;
 using Toybox.Math;
+using Toybox.Time;
 
 // This class contains the code for downloading the quotes from the backend.
 // When it is finished, it will call background.exit() if ruunning in the background,
@@ -20,8 +21,12 @@ class backendInteractionLogic {
 	private var processCallbackFunc;
 
 	private function syncAlreadyHappening() as Boolean {
-		var happening = Storage.getValue("syncHappening");
-		return happening == null ? false : happening;
+		var lastSync = (Storage.getValue("timeOfLastSync") == null) ? 0 : Storage.getValue("timeOfLastSync");
+
+		// If the sync has been going for over 2 minutes then it crashed somehow and the flag was never reset.
+		// Hence we manually reset it and let this new sync go through.
+		var syncBeenGoingForLongTime = (Time.now().value() - lastSync > 60 * 2);
+		return !syncBeenGoingForLongTime;
 	}
 
 	// When the event fires we first get the number of quote pages available to download
@@ -30,7 +35,7 @@ class backendInteractionLogic {
 			return;
 		}
 
-		Storage.setValue("syncHappening", true);
+		Storage.setValue("timeOfLastSync", Time.now().value());
 		syncStartedFromBackground = fromBackground;
 		processCallbackFunc = callbackFunc;
 
@@ -62,13 +67,14 @@ class backendInteractionLogic {
 	private function pickRandomQuoteAndExit() {
 		var quoteCount = Storage.getValue("quoteCount").toNumber();
 		if (quoteCount == null) {
+			Storage.setValue("timeOfLastSync", 0);
 			return;
 		}
 
 		var lastQuote = Storage.getValue("quoteOfTheDay");
 		var lastQuoteID = lastQuote == null ? "-1" : lastQuote["id"];
 
-		Math.srand(System.getTimer().abs());
+		Math.srand(Time.now().value());
 
 		// Keep picking a random quote until we have a different one to yesterday
 		var randomIndex = -1;
@@ -83,7 +89,7 @@ class backendInteractionLogic {
 		}
 
 		Storage.setValue("quoteOfTheDay", Storage.getValue(randomIndex));
-		Storage.setValue("syncHappening", false);
+		Storage.setValue("timeOfLastSync", 0);
 		
 		if (syncStartedFromBackground) {
 			Background.exit(null);

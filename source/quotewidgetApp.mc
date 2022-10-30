@@ -27,7 +27,7 @@ class quotewidgetApp extends Application.AppBase {
 	}
 
 	public function getServiceDelegate() {
-		return [ new quoteUpdateService(method(:onQuoteSyncComplete)) ];
+		return [ new quoteUpdateService() ];
 	}
 
 	public function onStorageChanged() {
