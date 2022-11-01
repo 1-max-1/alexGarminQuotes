@@ -10,7 +10,7 @@ using Toybox.Time;
 class backendInteractionLogic {
 	// Number of quotes per response page
 	private var PAGE_SIZE = 15;
-	private var BACKEND_HOST = "https://backends.onrender.com";
+	private var BACKEND_HOST = "";
 
 	// Will be set to the page number of the last page of quotes, once the page count has been received
 	// This will be equal to   pageCount - 1
@@ -19,6 +19,10 @@ class backendInteractionLogic {
 	private var syncStartedFromBackground = false;
 	// Callback function called when sync completes, if sync initiated from button press
 	private var processCallbackFunc;
+
+	function initialize() {
+		BACKEND_HOST = Application.loadResource(Rez.Strings.backend_url);
+	}
 
 	private function syncAlreadyHappening() as Boolean {
 		var lastSync = (Storage.getValue("timeOfLastSync") == null) ? 0 : Storage.getValue("timeOfLastSync");
